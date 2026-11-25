@@ -8,6 +8,10 @@ jobs:
   push:
     name: "g5v:latest"
     runs-on: ubuntu-latest
+    permissions:
+      # Required to create and push the package under the organization.
+      packages: write
+      contents: read
     strategy:
       fail-fast: false
     steps:
