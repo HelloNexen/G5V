@@ -276,6 +276,31 @@
                       />
                     </v-menu>
                   </v-col>
+                  <v-col cols="12">
+                    <v-text-field
+                      v-model="discordWebhook"
+                      :label="$t('SeasonDiscord.WebhookUrl')"
+                      :placeholder="
+                        discordWebhookSet && !discordRemove
+                          ? $t('SeasonDiscord.KeepPlaceholder')
+                          : 'https://discord.com/api/webhooks/…'
+                      "
+                      persistent-placeholder
+                      :hint="$t('SeasonDiscord.FormHint')"
+                      persistent-hint
+                      prepend-icon="mdi-discord"
+                      type="password"
+                      autocomplete="off"
+                      :disabled="discordRemove"
+                    />
+                    <v-checkbox
+                      v-if="discordWebhookSet"
+                      v-model="discordRemove"
+                      :label="$t('SeasonDiscord.RemoveCheckbox')"
+                      dense
+                      hide-details
+                    />
+                  </v-col>
                 </v-row>
                 <v-row class="justify-center">
                   <v-col cols="2">
@@ -579,6 +604,9 @@ export default {
         import_teams: true
       },
       importProvider: "challonge",
+      discordWebhook: "",
+      discordWebhookSet: false,
+      discordRemove: false,
       toornamentTournaments: [],
       toornamentLoading: false,
       toornamentError: "",
@@ -599,6 +627,9 @@ export default {
     newDialog(val) {
       if (!val) {
         this.formTitle = this.$t("Seasons.NewFormTitle");
+        this.discordWebhook = "";
+        this.discordWebhookSet = false;
+        this.discordRemove = false;
         this.$nextTick(() => {
           this.newSeason = {
             name: "",
@@ -764,10 +795,21 @@ export default {
           ];
           serverRes = await this.UpdateSeasonInfo(updateObj);
         }
+        const seasonId = this.newSeason.id != null ? this.newSeason.id : serverRes.id;
+        let discordMessage = "";
+        if (seasonId != null && (this.discordWebhook || this.discordRemove)) {
+          const discordRes = await this.UpdateSeasonDiscord(
+            seasonId,
+            this.discordRemove ? "" : this.discordWebhook
+          );
+          // The season itself is saved either way; only report the webhook problem.
+          if (discordRes.error)
+            discordMessage = ` ${this.$t("SeasonDiscord.SaveError")} ${discordRes.message || ""}`;
+        }
         if (serverRes.id != null)
-          this.response = this.$t("Seasons.SeasonCreated");
+          this.response = this.$t("Seasons.SeasonCreated") + discordMessage;
         else if (this.newSeason.id != null)
-          this.response = this.$t("Seasons.SeasonUpdated");
+          this.response = this.$t("Seasons.SeasonUpdated") + discordMessage;
         this.responseSheet = true;
         this.newDialog = false;
         this.seasons = [];
@@ -849,6 +891,10 @@ export default {
         cvars: seasonCvars == null ? seasonCvars : tmpArr,
         name: item.name
       };
+      this.discordWebhook = "";
+      this.discordRemove = false;
+      const discord = await this.GetSeasonDiscord(item.id);
+      this.discordWebhookSet = !discord.error && Boolean(discord.webhook_set);
       this.newDialog = true;
     },
     async importSeason() {
