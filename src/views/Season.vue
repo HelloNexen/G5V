@@ -41,14 +41,17 @@
               <v-icon
                 right
                 small
-                :color="seasonData.discord_webhook_set ? 'success' : 'grey'"
+                :color="discordConfiguredCount ? 'success' : 'grey'"
               >
                 {{
-                  seasonData.discord_webhook_set
+                  discordConfiguredCount
                     ? "mdi-check-circle"
                     : "mdi-circle-outline"
                 }}
               </v-icon>
+              <span v-if="discordConfiguredCount" class="text-caption ml-1">
+                {{ discordConfiguredCount }}/3
+              </span>
             </v-btn>
           </v-card-title>
         </v-col>
@@ -203,7 +206,7 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <v-dialog v-model="discordDialog" max-width="600px">
+    <v-dialog v-model="discordDialog" max-width="700px">
       <v-card>
         <v-card-title class="headline">
           <v-icon left>mdi-discord</v-icon>
@@ -211,66 +214,88 @@
         </v-card-title>
         <v-card-text>
           <p>{{ $t("SeasonDiscord.Explain") }}</p>
-          <v-alert
-            v-if="discordInfo.webhook_set && discordInfo.reachable"
-            type="success"
-            dense
-            outlined
+          <div
+            v-for="channel in discordChannels"
+            :key="channel"
+            class="mb-4 pa-3 rounded"
+            style="border: 1px solid rgba(128, 128, 128, 0.3)"
           >
-            {{
-              $t("SeasonDiscord.Connected", {
-                name: discordInfo.name,
-                channel: discordInfo.channel_id
-              })
-            }}
-          </v-alert>
-          <v-alert
-            v-else-if="discordInfo.webhook_set && discordInfo.reachable === false"
-            type="warning"
-            dense
-            outlined
-          >
-            {{ $t("SeasonDiscord.Unreachable") }}
-          </v-alert>
-          <v-text-field
-            v-model="discordWebhook"
-            :label="$t('SeasonDiscord.WebhookUrl')"
-            :placeholder="
-              discordInfo.webhook_set ? $t('SeasonDiscord.KeepPlaceholder') : ''
-            "
-            :persistent-placeholder="discordInfo.webhook_set"
-            hint="https://discord.com/api/webhooks/…"
-            type="password"
-            autocomplete="off"
-            :error-messages="discordError ? [discordError] : []"
-          />
+            <div class="d-flex align-center">
+              <v-icon left>{{ discordIcons[channel] }}</v-icon>
+              <span class="subtitle-1 font-weight-medium">
+                {{ $t(`SeasonDiscord.Channel_${channel}`) }}
+              </span>
+              <v-spacer />
+              <v-chip
+                v-if="discordInfo[channel] && discordInfo[channel].webhook_set"
+                x-small
+                :color="discordInfo[channel].reachable ? 'success' : 'warning'"
+              >
+                {{
+                  discordInfo[channel].reachable
+                    ? discordInfo[channel].name
+                    : $t("SeasonDiscord.UnreachableShort")
+                }}
+              </v-chip>
+            </div>
+            <div class="text-caption mb-1">
+              {{ $t(`SeasonDiscord.ChannelHint_${channel}`) }}
+            </div>
+            <v-text-field
+              v-model="discordInputs[channel]"
+              :label="$t('SeasonDiscord.WebhookUrl')"
+              :placeholder="
+                discordInfo[channel] && discordInfo[channel].webhook_set
+                  ? $t('SeasonDiscord.KeepPlaceholder')
+                  : 'https://discord.com/api/webhooks/…'
+              "
+              persistent-placeholder
+              type="password"
+              autocomplete="off"
+              dense
+              :error-messages="
+                discordErrors[channel] ? [discordErrors[channel]] : []
+              "
+            />
+            <div class="d-flex">
+              <v-btn
+                v-if="discordInfo[channel] && discordInfo[channel].webhook_set"
+                small
+                text
+                color="red darken-1"
+                :loading="discordSaving === `${channel}:remove`"
+                @click="saveDiscord(channel, '')"
+              >
+                {{ $t("SeasonDiscord.Remove") }}
+              </v-btn>
+              <v-spacer />
+              <v-btn
+                small
+                text
+                :disabled="
+                  !(discordInfo[channel] && discordInfo[channel].webhook_set)
+                "
+                :loading="discordSaving === `${channel}:test`"
+                @click="testDiscord(channel)"
+              >
+                {{ $t("SeasonDiscord.Test") }}
+              </v-btn>
+              <v-btn
+                small
+                color="primary"
+                :disabled="!discordInputs[channel]"
+                :loading="discordSaving === `${channel}:save`"
+                @click="saveDiscord(channel, discordInputs[channel])"
+              >
+                {{ $t("SeasonDiscord.Save") }}
+              </v-btn>
+            </div>
+          </div>
         </v-card-text>
         <v-card-actions>
-          <v-btn
-            v-if="discordInfo.webhook_set"
-            text
-            color="red darken-1"
-            :loading="discordSaving === 'remove'"
-            @click="saveDiscord('')"
-          >
-            {{ $t("SeasonDiscord.Remove") }}
-          </v-btn>
           <v-spacer />
-          <v-btn
-            text
-            :disabled="!discordInfo.webhook_set"
-            :loading="discordSaving === 'test'"
-            @click="testDiscord"
-          >
-            {{ $t("SeasonDiscord.Test") }}
-          </v-btn>
-          <v-btn
-            color="primary"
-            :disabled="!discordWebhook"
-            :loading="discordSaving === 'save'"
-            @click="saveDiscord(discordWebhook)"
-          >
-            {{ $t("SeasonDiscord.Save") }}
+          <v-btn text @click="discordDialog = false">
+            {{ $t("misc.Close") }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -327,9 +352,15 @@ export default {
       manualPicks: [],
       snackbar: { show: false, text: "", color: "success" },
       discordDialog: false,
+      discordChannels: ["launch", "live", "results"],
+      discordIcons: {
+        launch: "mdi-rocket-launch",
+        live: "mdi-access-point",
+        results: "mdi-trophy"
+      },
       discordInfo: {},
-      discordWebhook: "",
-      discordError: "",
+      discordInputs: { launch: "", live: "", results: "" },
+      discordErrors: { launch: "", live: "", results: "" },
       discordSaving: null
     };
   },
@@ -349,31 +380,40 @@ export default {
   },
   methods: {
     async openDiscordDialog() {
-      this.discordWebhook = "";
-      this.discordError = "";
+      this.discordInputs = { launch: "", live: "", results: "" };
+      this.discordErrors = { launch: "", live: "", results: "" };
       this.discordInfo = {};
       this.discordDialog = true;
-      const res = await this.GetSeasonDiscord(this.seasonData.id);
-      if (!res.error) this.discordInfo = res;
+      await this.loadDiscordInfo();
     },
-    async saveDiscord(url) {
-      this.discordSaving = url ? "save" : "remove";
-      this.discordError = "";
-      const res = await this.UpdateSeasonDiscord(this.seasonData.id, url);
+    async loadDiscordInfo() {
+      const res = await this.GetSeasonDiscord(this.seasonData.id);
+      if (res.error) return;
+      this.discordInfo = res;
+      for (const channel of this.discordChannels) {
+        const key =
+          channel === "launch"
+            ? "discord_webhook_set"
+            : `discord_${channel}_webhook_set`;
+        this.$set(this.seasonData, key, Boolean(res[channel]?.webhook_set));
+      }
+    },
+    async saveDiscord(channel, url) {
+      this.discordSaving = `${channel}:${url ? "save" : "remove"}`;
+      this.$set(this.discordErrors, channel, "");
+      const res = await this.UpdateSeasonDiscord(this.seasonData.id, url, channel);
       this.discordSaving = null;
       if (res.error) {
-        this.discordError = res.message || "Error";
+        this.$set(this.discordErrors, channel, res.message || "Error");
         return;
       }
-      this.seasonData.discord_webhook_set = Boolean(url);
-      this.discordWebhook = "";
+      this.$set(this.discordInputs, channel, "");
       this.snackbar = { show: true, text: res.message, color: "success" };
-      const info = await this.GetSeasonDiscord(this.seasonData.id);
-      if (!info.error) this.discordInfo = info;
+      await this.loadDiscordInfo();
     },
-    async testDiscord() {
-      this.discordSaving = "test";
-      const res = await this.TestSeasonDiscord(this.seasonData.id);
+    async testDiscord(channel) {
+      this.discordSaving = `${channel}:test`;
+      const res = await this.TestSeasonDiscord(this.seasonData.id, channel);
       this.discordSaving = null;
       this.snackbar = {
         show: true,
@@ -480,6 +520,13 @@ export default {
         this.user.id != null &&
         (this.isAdmin || this.user.id == this.seasonData.user_id)
       );
+    },
+    discordConfiguredCount() {
+      return [
+        this.seasonData.discord_webhook_set,
+        this.seasonData.discord_live_webhook_set,
+        this.seasonData.discord_results_webhook_set
+      ].filter(Boolean).length;
     },
     mapPool() {
       const pool = this.preparedMatch?.veto_mappool || "";

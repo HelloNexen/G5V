@@ -276,26 +276,34 @@
                       />
                     </v-menu>
                   </v-col>
-                  <v-col cols="12">
+                  <v-col
+                    cols="12"
+                    v-for="channel in discordChannels"
+                    :key="`discord-${channel}`"
+                  >
                     <v-text-field
-                      v-model="discordWebhook"
-                      :label="$t('SeasonDiscord.WebhookUrl')"
+                      v-model="discordWebhooks[channel]"
+                      :label="
+                        `${$t('SeasonDiscord.WebhookUrl')} · ${$t(
+                          `SeasonDiscord.Channel_${channel}`
+                        )}`
+                      "
                       :placeholder="
-                        discordWebhookSet && !discordRemove
+                        discordSet[channel] && !discordRemove[channel]
                           ? $t('SeasonDiscord.KeepPlaceholder')
                           : 'https://discord.com/api/webhooks/…'
                       "
                       persistent-placeholder
-                      :hint="$t('SeasonDiscord.FormHint')"
+                      :hint="$t(`SeasonDiscord.ChannelHint_${channel}`)"
                       persistent-hint
                       prepend-icon="mdi-discord"
                       type="password"
                       autocomplete="off"
-                      :disabled="discordRemove"
+                      :disabled="discordRemove[channel]"
                     />
                     <v-checkbox
-                      v-if="discordWebhookSet"
-                      v-model="discordRemove"
+                      v-if="discordSet[channel]"
+                      v-model="discordRemove[channel]"
                       :label="$t('SeasonDiscord.RemoveCheckbox')"
                       dense
                       hide-details
@@ -604,9 +612,10 @@ export default {
         import_teams: true
       },
       importProvider: "challonge",
-      discordWebhook: "",
-      discordWebhookSet: false,
-      discordRemove: false,
+      discordChannels: ["launch", "live", "results"],
+      discordWebhooks: { launch: "", live: "", results: "" },
+      discordSet: { launch: false, live: false, results: false },
+      discordRemove: { launch: false, live: false, results: false },
       toornamentTournaments: [],
       toornamentLoading: false,
       toornamentError: "",
@@ -627,9 +636,7 @@ export default {
     newDialog(val) {
       if (!val) {
         this.formTitle = this.$t("Seasons.NewFormTitle");
-        this.discordWebhook = "";
-        this.discordWebhookSet = false;
-        this.discordRemove = false;
+        this.resetDiscordForm();
         this.$nextTick(() => {
           this.newSeason = {
             name: "",
@@ -796,16 +803,26 @@ export default {
           serverRes = await this.UpdateSeasonInfo(updateObj);
         }
         const seasonId = this.newSeason.id != null ? this.newSeason.id : serverRes.id;
-        let discordMessage = "";
-        if (seasonId != null && (this.discordWebhook || this.discordRemove)) {
-          const discordRes = await this.UpdateSeasonDiscord(
-            seasonId,
-            this.discordRemove ? "" : this.discordWebhook
-          );
-          // The season itself is saved either way; only report the webhook problem.
-          if (discordRes.error)
-            discordMessage = ` ${this.$t("SeasonDiscord.SaveError")} ${discordRes.message || ""}`;
+        const discordFailures = [];
+        if (seasonId != null) {
+          for (const channel of this.discordChannels) {
+            if (!this.discordWebhooks[channel] && !this.discordRemove[channel])
+              continue;
+            const discordRes = await this.UpdateSeasonDiscord(
+              seasonId,
+              this.discordRemove[channel] ? "" : this.discordWebhooks[channel],
+              channel
+            );
+            if (discordRes.error)
+              discordFailures.push(
+                `${this.$t(`SeasonDiscord.Channel_${channel}`)}: ${discordRes.message || ""}`
+              );
+          }
         }
+        // The season itself is saved either way; only report the webhook problems.
+        const discordMessage = discordFailures.length
+          ? ` ${this.$t("SeasonDiscord.SaveError")} ${discordFailures.join(" / ")}`
+          : "";
         if (serverRes.id != null)
           this.response = this.$t("Seasons.SeasonCreated") + discordMessage;
         else if (this.newSeason.id != null)
@@ -891,11 +908,18 @@ export default {
         cvars: seasonCvars == null ? seasonCvars : tmpArr,
         name: item.name
       };
-      this.discordWebhook = "";
-      this.discordRemove = false;
+      this.resetDiscordForm();
       const discord = await this.GetSeasonDiscord(item.id);
-      this.discordWebhookSet = !discord.error && Boolean(discord.webhook_set);
+      if (!discord.error) {
+        for (const channel of this.discordChannels)
+          this.discordSet[channel] = Boolean(discord[channel]?.webhook_set);
+      }
       this.newDialog = true;
+    },
+    resetDiscordForm() {
+      this.discordWebhooks = { launch: "", live: "", results: "" };
+      this.discordSet = { launch: false, live: false, results: false };
+      this.discordRemove = { launch: false, live: false, results: false };
     },
     async importSeason() {
       let importData = [this.challongeInfo];
