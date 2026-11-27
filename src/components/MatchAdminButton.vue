@@ -421,7 +421,7 @@ export default {
           apiCall: async () => {
             let res = await this.GetMatchBackups(this.matchInfo.id);
             if (res.response) {
-              this.backups = res.response.split("\n");
+              this.backups = this.toBackupItems(res);
               this.backupDialog = true;
             } else {
               this.response = res.message;
@@ -504,7 +504,7 @@ export default {
           apiCall: async () => {
             let res = await this.GetMatchBackups(this.matchInfo.id);
             if (res.response) {
-              this.backups = res.response.split("\n");
+              this.backups = this.toBackupItems(res);
               this.backupDialog = true;
             } else {
               this.response = res.message;
@@ -564,6 +564,17 @@ export default {
     }
   },
   methods: {
+    /** Backup choices: the listed line as text, only its file name as value. */
+    toBackupItems(res) {
+      if (Array.isArray(res.backups))
+        return res.backups.map(b => ({ text: b.label, value: b.file }));
+      // Older API: fall back to the raw lines, keeping only the file name.
+      return String(res.response)
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => /^[\w.-]+\.(json|cfg)(\s|$)/i.test(line))
+        .map(line => ({ text: line, value: line.split(/\s+/)[0] }));
+    },
     async cancelCurrentMatch() {
       this.isLoading = true;
       let matchRes = await this.CancelMatch(this.matchInfo.id);
