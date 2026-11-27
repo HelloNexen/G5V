@@ -34,6 +34,22 @@
             <v-btn :to="`/leaderboard/teams/${seasonData.id}`">
               {{ $t("Leaderboard.TTitle") }}
             </v-btn>
+            <v-spacer />
+            <v-btn v-if="canConfigureSeason" @click="openDiscordDialog">
+              <v-icon left>mdi-discord</v-icon>
+              Discord
+              <v-icon
+                right
+                small
+                :color="seasonData.discord_webhook_set ? 'success' : 'grey'"
+              >
+                {{
+                  seasonData.discord_webhook_set
+                    ? "mdi-check-circle"
+                    : "mdi-circle-outline"
+                }}
+              </v-icon>
+            </v-btn>
           </v-card-title>
         </v-col>
         <v-col cols="12" v-if="!showToornament">
@@ -187,6 +203,78 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    <v-dialog v-model="discordDialog" max-width="600px">
+      <v-card>
+        <v-card-title class="headline">
+          <v-icon left>mdi-discord</v-icon>
+          {{ $t("SeasonDiscord.Title") }}
+        </v-card-title>
+        <v-card-text>
+          <p>{{ $t("SeasonDiscord.Explain") }}</p>
+          <v-alert
+            v-if="discordInfo.webhook_set && discordInfo.reachable"
+            type="success"
+            dense
+            outlined
+          >
+            {{
+              $t("SeasonDiscord.Connected", {
+                name: discordInfo.name,
+                channel: discordInfo.channel_id
+              })
+            }}
+          </v-alert>
+          <v-alert
+            v-else-if="discordInfo.webhook_set && discordInfo.reachable === false"
+            type="warning"
+            dense
+            outlined
+          >
+            {{ $t("SeasonDiscord.Unreachable") }}
+          </v-alert>
+          <v-text-field
+            v-model="discordWebhook"
+            :label="$t('SeasonDiscord.WebhookUrl')"
+            :placeholder="
+              discordInfo.webhook_set ? $t('SeasonDiscord.KeepPlaceholder') : ''
+            "
+            :persistent-placeholder="discordInfo.webhook_set"
+            hint="https://discord.com/api/webhooks/…"
+            type="password"
+            autocomplete="off"
+            :error-messages="discordError ? [discordError] : []"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-btn
+            v-if="discordInfo.webhook_set"
+            text
+            color="red darken-1"
+            :loading="discordSaving === 'remove'"
+            @click="saveDiscord('')"
+          >
+            {{ $t("SeasonDiscord.Remove") }}
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            text
+            :disabled="!discordInfo.webhook_set"
+            :loading="discordSaving === 'test'"
+            @click="testDiscord"
+          >
+            {{ $t("SeasonDiscord.Test") }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            :disabled="!discordWebhook"
+            :loading="discordSaving === 'save'"
+            @click="saveDiscord(discordWebhook)"
+          >
+            {{ $t("SeasonDiscord.Save") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="6000">
       {{ snackbar.text }}
     </v-snackbar>
@@ -237,7 +325,12 @@ export default {
       vetoMode: "ingame",
       vetoFirst: "team1",
       manualPicks: [],
-      snackbar: { show: false, text: "", color: "success" }
+      snackbar: { show: false, text: "", color: "success" },
+      discordDialog: false,
+      discordInfo: {},
+      discordWebhook: "",
+      discordError: "",
+      discordSaving: null
     };
   },
   async created() {
@@ -255,6 +348,39 @@ export default {
         .replace("T", " ");
   },
   methods: {
+    async openDiscordDialog() {
+      this.discordWebhook = "";
+      this.discordError = "";
+      this.discordInfo = {};
+      this.discordDialog = true;
+      const res = await this.GetSeasonDiscord(this.seasonData.id);
+      if (!res.error) this.discordInfo = res;
+    },
+    async saveDiscord(url) {
+      this.discordSaving = url ? "save" : "remove";
+      this.discordError = "";
+      const res = await this.UpdateSeasonDiscord(this.seasonData.id, url);
+      this.discordSaving = null;
+      if (res.error) {
+        this.discordError = res.message || "Error";
+        return;
+      }
+      this.seasonData.discord_webhook_set = Boolean(url);
+      this.discordWebhook = "";
+      this.snackbar = { show: true, text: res.message, color: "success" };
+      const info = await this.GetSeasonDiscord(this.seasonData.id);
+      if (!info.error) this.discordInfo = info;
+    },
+    async testDiscord() {
+      this.discordSaving = "test";
+      const res = await this.TestSeasonDiscord(this.seasonData.id);
+      this.discordSaving = null;
+      this.snackbar = {
+        show: true,
+        text: res.message || "Error",
+        color: res.error ? "error" : "success"
+      };
+    },
     isDuplicate(index) {
       const map = this.manualPicks[index]?.map;
       return (
@@ -348,6 +474,12 @@ export default {
     },
     canManageSeason() {
       return this.isAdmin;
+    },
+    canConfigureSeason() {
+      return (
+        this.user.id != null &&
+        (this.isAdmin || this.user.id == this.seasonData.user_id)
+      );
     },
     mapPool() {
       const pool = this.preparedMatch?.veto_mappool || "";
