@@ -870,6 +870,38 @@ export default {
       }
       return message;
     },
+    async GetSeasonDiscord(seasonId) {
+      try {
+        const res = await this.axioCall.get(
+          `${process.env?.VUE_APP_G5V_API_URL || "/api"}/seasons/${seasonId}/discord`
+        );
+        return { error: false, ...res.data };
+      } catch (error) {
+        return { error: true, message: error.response?.data?.message };
+      }
+    },
+    async UpdateSeasonDiscord(seasonId, webhookUrl, channel = "launch") {
+      try {
+        const res = await this.axioCall.put(
+          `${process.env?.VUE_APP_G5V_API_URL || "/api"}/seasons/${seasonId}/discord`,
+          { webhook_url: webhookUrl, channel }
+        );
+        return { error: false, ...res.data };
+      } catch (error) {
+        return { error: true, message: error.response?.data?.message };
+      }
+    },
+    async TestSeasonDiscord(seasonId, channel = "launch") {
+      try {
+        const res = await this.axioCall.post(
+          `${process.env?.VUE_APP_G5V_API_URL || "/api"}/seasons/${seasonId}/discord/test`,
+          { channel }
+        );
+        return { error: false, message: res.data.message };
+      } catch (error) {
+        return { error: true, message: error.response?.data?.message };
+      }
+    },
     async GetToornamentSeasonBoard(seasonId) {
       try {
         const res = await this.axioCall.get(
