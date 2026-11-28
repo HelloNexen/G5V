@@ -224,6 +224,18 @@
                 />
               </v-col>
             </v-row>
+            <v-row class="justify-center" v-if="!newMatchData.skip_veto">
+              <v-col lg="4" md="8" sm="12">
+                <v-select
+                  v-model="newMatchData.veto_first"
+                  :items="vetoChoiceItems"
+                  :label="$t('CreateMatch.VetoChoice')"
+                  :hint="$t('CreateMatch.VetoChoiceHint')"
+                  persistent-hint
+                  prepend-icon="mdi-hand-back-left"
+                />
+              </v-col>
+            </v-row>
             <v-row class="justify-center" v-if="newMatchData.skip_veto">
               <v-col
                 lg="3"
@@ -396,6 +408,25 @@ export default {
     MapList: []
   }),
   computed: {
+    vetoChoiceItems() {
+      const nameOf = id => {
+        const team = Array.isArray(this.teams)
+          ? this.teams.find(t => t.id === id)
+          : null;
+        return team ? ` (${team.name})` : "";
+      };
+      return [
+        {
+          value: "team1",
+          text: this.$t("CreateMatch.VetoChoiceTeam1") + nameOf(this.newMatchData.team1_id)
+        },
+        {
+          value: "team2",
+          text: this.$t("CreateMatch.VetoChoiceTeam2") + nameOf(this.newMatchData.team2_id)
+        },
+        { value: "random", text: this.$t("CreateMatch.VetoChoiceRps") }
+      ];
+    },
     currentTitle() {
       switch (this.step) {
         case 1:
@@ -460,7 +491,13 @@ export default {
             seasonCvars.wingman == null || seasonCvars.wingman == 0
               ? false
               : true;
+          this.newMatchData.veto_first = ["team1", "team2", "random"].includes(
+            seasonCvars.veto_first
+          )
+            ? seasonCvars.veto_first
+            : "team1";
           //Delete all used get prepare custom CVARs.
+          delete seasonCvars.veto_first;
           delete seasonCvars.min_players_to_ready;
           delete seasonCvars.min_spectators_to_ready;
           delete seasonCvars.players_per_team;
