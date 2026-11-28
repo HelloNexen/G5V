@@ -140,7 +140,9 @@
             <v-select
               v-model="vetoFirst"
               :items="vetoFirstItems"
-              :label="$t('ToornamentBoard.VetoFirst')"
+              :label="$t('CreateMatch.VetoChoice')"
+              :hint="$t('CreateMatch.VetoChoiceHint')"
+              persistent-hint
               dense
               class="mt-3"
             />
@@ -555,7 +557,7 @@ export default {
       return [
         { value: "team1", text: this.teamNames.team1 },
         { value: "team2", text: this.teamNames.team2 },
-        { value: "random", text: this.$t("ToornamentBoard.Random") }
+        { value: "random", text: this.$t("CreateMatch.VetoChoiceRps") }
       ];
     },
     canSubmit() {

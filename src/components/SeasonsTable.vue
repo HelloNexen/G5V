@@ -462,6 +462,18 @@
                     />
                   </v-col>
                 </v-row>
+                <v-row class="justify-center" v-if="!seasonDefaults.skip_veto">
+                  <v-col lg="4" md="8" sm="12">
+                    <v-select
+                      v-model="seasonDefaults.veto_first"
+                      :items="vetoChoiceItems"
+                      :label="$t('CreateMatch.VetoChoice')"
+                      :hint="$t('CreateMatch.VetoChoiceHint')"
+                      persistent-hint
+                      prepend-icon="mdi-hand-back-left"
+                    />
+                  </v-col>
+                </v-row>
                 <v-row class="justify-center">
                   <v-radio-group
                     v-model="seasonDefaults.side_type"
@@ -593,7 +605,8 @@ export default {
         spectators: [],
         side_type: "standard",
         map_sides: [],
-        wingman: false
+        wingman: false,
+        veto_first: "team1"
       },
       datemenu: false,
       formTitle: this.$t("Seasons.NewFormTitle"),
@@ -659,7 +672,8 @@ export default {
             spectators: [],
             side_type: "standard",
             map_sides: [],
-            wingman: false
+            wingman: false,
+            veto_first: "team1"
           };
           this.$refs.newSeasonForm.resetValidation();
         });
@@ -854,7 +868,8 @@ export default {
             spectators: [],
             side_type: "standard",
             map_sides: [],
-            wingman: false
+            wingman: false,
+            veto_first: "team1"
           };
           this.$refs.newSeasonForm.resetValidation();
         });
@@ -880,6 +895,7 @@ export default {
             obj !== "players_per_team" &&
             obj !== "maps_to_win" &&
             obj !== "skip_veto" &&
+            obj !== "veto_first" &&
             obj !== "wingman" &&
             obj !== "map_pool" &&
             obj !== "spectators" &&
@@ -945,6 +961,13 @@ export default {
     }
   },
   computed: {
+    vetoChoiceItems() {
+      return [
+        { value: "team1", text: this.$t("CreateMatch.VetoChoiceTeam1") },
+        { value: "team2", text: this.$t("CreateMatch.VetoChoiceTeam2") },
+        { value: "random", text: this.$t("CreateMatch.VetoChoiceRps") }
+      ];
+    },
     isAdmin() {
       return Boolean(
         this.user && (this.user.admin == 1 || this.user.super_admin == 1)
